@@ -1,13 +1,17 @@
-use eframe::egui;
-use crate::constraint::{Constraint, DigitsConstraint, GivenDigitConstraint, LatinSquareConstraint, StandardBoxesConstraint};
+use crate::constraint::{
+    Constraint, DigitsConstraint, GivenDigitConstraint, LatinSquareConstraint,
+    StandardBoxesConstraint,
+};
 use crate::sudoku;
-use crate::sudoku::{SUDOKU_SIZE, SudokuContext};
+use crate::sudoku::{SudokuContext, SUDOKU_SIZE};
+use eframe::egui;
 
 struct SudokuWidget<'a> {
     width: usize,
     height: usize,
     given_digits: &'a mut [Option<i32>],
     selected_cell: &'a mut Option<sudoku::Cell>,
+    solution: &'a mut Option<Vec<i32>>,
 }
 
 impl<'a> SudokuWidget<'a> {
@@ -16,6 +20,7 @@ impl<'a> SudokuWidget<'a> {
         height: usize,
         given_digits: &'a mut [Option<i32>],
         selected_cell: &'a mut Option<sudoku::Cell>,
+        solution: &'a mut Option<Vec<i32>>,
     ) -> Self {
         assert_eq!(given_digits.len(), width * height);
         Self {
@@ -23,6 +28,7 @@ impl<'a> SudokuWidget<'a> {
             height,
             given_digits,
             selected_cell,
+            solution,
         }
     }
 
@@ -34,6 +40,7 @@ impl<'a> SudokuWidget<'a> {
     fn set_given_digit(&mut self, row: usize, col: usize, digit: Option<i32>) {
         assert!(row < self.width && col < self.height);
         self.given_digits[col + self.width * row] = digit;
+        *self.solution = None;
     }
 
     fn cell_rect(left: f32, top: f32, cell_size: f32, row: usize, col: usize) -> egui::Rect {
@@ -41,6 +48,27 @@ impl<'a> SudokuWidget<'a> {
             left + col as f32 * cell_size..=left + (col + 1) as f32 * cell_size,
             top + row as f32 * cell_size..=top + (row + 1) as f32 * cell_size,
         )
+    }
+
+    fn draw_digit(
+        left: f32,
+        top: f32,
+        cell_size: f32,
+        row: usize,
+        col: usize,
+        digit: i32,
+        ui: &egui::Ui,
+        color: egui::Color32,
+    ) {
+        let mut font = egui::FontSelection::Default.resolve(ui.style());
+        font.size = cell_size / ui.input().pixels_per_point * 0.8;
+        ui.painter().text(
+            Self::cell_rect(left, top, cell_size, row, col).center(),
+            egui::Align2::CENTER_CENTER,
+            digit,
+            font,
+            color,
+        );
     }
 }
 
@@ -86,14 +114,30 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
             for row in 0..self.height {
                 for col in 0..self.width {
                     if let Some(digit) = self.get_given_digit(row, col) {
-                        let mut font = egui::FontSelection::Default.resolve(ui.style());
-                        font.size = cell_size / ui.input().pixels_per_point * 0.8;
-                        ui.painter().text(
-                            Self::cell_rect(left, top, cell_size, row, col).center(),
-                            egui::Align2::CENTER_CENTER,
+                        Self::draw_digit(
+                            left,
+                            top,
+                            cell_size,
+                            row,
+                            col,
                             digit,
-                            font,
+                            ui,
                             ui.style().visuals.widgets.active.text_color(),
+                        );
+                    } else if let Some(solution) = self.solution {
+                        Self::draw_digit(
+                            left,
+                            top,
+                            cell_size,
+                            row,
+                            col,
+                            solution[col + SUDOKU_SIZE * row],
+                            ui,
+                            if ui.style().visuals.dark_mode {
+                                egui::Color32::LIGHT_BLUE
+                            } else {
+                                egui::Color32::DARK_BLUE
+                            },
                         );
                     }
                     if ui
@@ -199,13 +243,14 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
                 }
             }
         })
-            .response
+        .response
     }
 }
 
 struct MyApp {
     grid: [Option<i32>; SUDOKU_SIZE * SUDOKU_SIZE],
     selected_cell: Option<sudoku::Cell>,
+    solution: Option<Vec<i32>>,
 }
 
 impl MyApp {
@@ -213,6 +258,7 @@ impl MyApp {
         MyApp {
             grid: [None; SUDOKU_SIZE * SUDOKU_SIZE],
             selected_cell: None,
+            solution: None,
         }
     }
 
@@ -250,6 +296,7 @@ impl MyApp {
         let model = solver
             .get_model()
             .expect("The solver check should have passed");
+        let mut solution = vec![0; SUDOKU_SIZE * SUDOKU_SIZE];
         for row in 0..sudoku.height() {
             for col in 0..sudoku.width() {
                 let result = model
@@ -257,9 +304,10 @@ impl MyApp {
                     .unwrap()
                     .as_u64()
                     .unwrap() as i32;
-                self.grid[col + row * SUDOKU_SIZE] = Some(result);
+                solution[col + row * SUDOKU_SIZE] = result;
             }
         }
+        self.solution = Some(solution);
 
         return result;
     }
@@ -283,6 +331,7 @@ impl eframe::App for MyApp {
                             SUDOKU_SIZE,
                             &mut self.grid,
                             &mut self.selected_cell,
+                            &mut self.solution,
                         ));
                     });
                 });
