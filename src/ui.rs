@@ -1,10 +1,15 @@
 use crate::constraint::{
-    Constraint, DigitsConstraint, GivenDigitConstraint, LatinSquareConstraint,
-    StandardBoxesConstraint,
+    ConfigurableConstraint, Constraint, DigitsConstraint, GivenDigitConstraint,
+    LatinSquareConstraint, StandardBoxesConstraint,
 };
-use crate::sudoku;
 use crate::sudoku::{SudokuContext, SUDOKU_SIZE};
+use crate::{color, constraint, sudoku};
 use eframe::egui;
+
+struct ConstraintUi {
+    color: egui::Color32,
+    constraint: Box<dyn ConfigurableConstraint>,
+}
 
 struct SudokuWidget<'a> {
     width: usize,
@@ -12,6 +17,8 @@ struct SudokuWidget<'a> {
     given_digits: &'a mut [Option<i32>],
     selected_cell: &'a mut Option<sudoku::Cell>,
     solution: &'a mut Option<Vec<i32>>,
+    extra_constraints: &'a mut [ConstraintUi],
+    selected_extra_constraint: Option<usize>,
 }
 
 impl<'a> SudokuWidget<'a> {
@@ -21,6 +28,8 @@ impl<'a> SudokuWidget<'a> {
         given_digits: &'a mut [Option<i32>],
         selected_cell: &'a mut Option<sudoku::Cell>,
         solution: &'a mut Option<Vec<i32>>,
+        extra_constraints: &'a mut [ConstraintUi],
+        selected_extra_constraint: Option<usize>,
     ) -> Self {
         assert_eq!(given_digits.len(), width * height);
         Self {
@@ -29,6 +38,8 @@ impl<'a> SudokuWidget<'a> {
             given_digits,
             selected_cell,
             solution,
+            extra_constraints,
+            selected_extra_constraint,
         }
     }
 
@@ -100,15 +111,6 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
                 ui.painter()
                     .hline(left..=left + width, top + y as f32 * cell_size, stroke);
             }
-            if let Some(selected) = self.selected_cell {
-                let mut stroke = ui.style().visuals.selection.stroke;
-                stroke.width = 2f32;
-                ui.painter().rect_stroke(
-                    Self::cell_rect(left, top, cell_size, selected.row, selected.col).shrink(2.0),
-                    2f32,
-                    stroke,
-                );
-            }
 
             let mut clicked_cell = false;
             for row in 0..self.height {
@@ -140,18 +142,94 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
                             },
                         );
                     }
-                    if ui
-                        .interact(
-                            Self::cell_rect(left, top, cell_size, row, col),
-                            ui.make_persistent_id((row, col)),
-                            egui::Sense::click(),
-                        )
-                        .clicked()
-                    {
+                    let cell_interaction = ui.interact(
+                        Self::cell_rect(left, top, cell_size, row, col),
+                        ui.make_persistent_id((row, col)),
+                        egui::Sense::click(),
+                    );
+                    if cell_interaction.clicked() {
                         *self.selected_cell = Some(sudoku::Cell::new(row, col));
                         clicked_cell = true;
+                    } else if cell_interaction.clicked_by(egui::PointerButton::Secondary) {
+                        if let Some(constraint_index) = self.selected_extra_constraint {
+                            let constraint =
+                                &mut self.extra_constraints[constraint_index].constraint;
+                            let max_highlighted_cells = constraint.get_max_highlighted_cells();
+                            if let Some(highlighted_cells) = constraint.get_highlighted_cells() {
+                                if let Some(existing_index) = highlighted_cells
+                                    .iter()
+                                    .position(|c| c.row == row && c.col == col)
+                                {
+                                    highlighted_cells.remove(existing_index);
+                                } else {
+                                    if highlighted_cells.len() == max_highlighted_cells {
+                                        highlighted_cells.remove(0);
+                                    }
+                                    highlighted_cells.push(sudoku::Cell::new(row, col));
+                                }
+                                *self.selected_cell = None;
+                                clicked_cell = true;
+                            }
+                        }
                     }
                 }
+            }
+
+            let mut n_times_cell_constrained = vec![0; self.width * self.height];
+            for (constraint_index, constraint) in self.extra_constraints.iter_mut().enumerate() {
+                if self.selected_extra_constraint.contains(&constraint_index) {
+                    continue;
+                }
+
+                if let Some(cells) = constraint.constraint.get_highlighted_cells() {
+                    for cell in cells {
+                        let mut cell_rect =
+                            Self::cell_rect(left, top, cell_size, cell.row, cell.col);
+                        n_times_cell_constrained[cell.col + self.width * cell.row] += 1;
+                        let amt_to_shrink = ((2 * n_times_cell_constrained
+                            [cell.col + self.width * cell.row])
+                            as f32)
+                            .min(cell_rect.width() * 0.5 - 1.0);
+                        cell_rect = cell_rect.shrink(amt_to_shrink);
+                        ui.painter().rect_stroke(
+                            cell_rect,
+                            2f32,
+                            egui::Stroke::new(1f32, constraint.color),
+                        );
+                    }
+                }
+            }
+
+            if let Some(selected_constraint) = self.selected_extra_constraint {
+                let constraint = &mut self.extra_constraints[selected_constraint];
+                if let Some(cells) = constraint.constraint.get_highlighted_cells() {
+                    for (index, cell) in cells.iter().enumerate() {
+                        let cell_rect =
+                            Self::cell_rect(left, top, cell_size, cell.row, cell.col).shrink(2.0);
+                        ui.painter().rect_stroke(
+                            cell_rect,
+                            2f32,
+                            egui::Stroke::new(3f32, constraint.color),
+                        );
+                        ui.painter().text(
+                            cell_rect.min + egui::Vec2::new(2.0, 2.0),
+                            egui::Align2::LEFT_TOP,
+                            index + 1,
+                            egui::FontSelection::Default.resolve(ui.style()),
+                            constraint.color,
+                        );
+                    }
+                }
+            }
+
+            if let Some(selected) = self.selected_cell {
+                let mut stroke = ui.style().visuals.selection.stroke;
+                stroke.width = 2f32;
+                ui.painter().rect_stroke(
+                    Self::cell_rect(left, top, cell_size, selected.row, selected.col).shrink(2.0),
+                    2f32,
+                    stroke,
+                );
             }
 
             if !clicked_cell && ui.input().pointer.primary_released() {
@@ -251,6 +329,8 @@ struct MyApp {
     grid: [Option<i32>; SUDOKU_SIZE * SUDOKU_SIZE],
     selected_cell: Option<sudoku::Cell>,
     solution: Option<Vec<i32>>,
+    extra_constraints: Vec<ConstraintUi>,
+    selected_constraint: Option<usize>,
 }
 
 impl MyApp {
@@ -259,10 +339,16 @@ impl MyApp {
             grid: [None; SUDOKU_SIZE * SUDOKU_SIZE],
             selected_cell: None,
             solution: None,
+            extra_constraints: Vec::new(),
+            selected_constraint: None,
         }
     }
 
     fn solve(&mut self) -> z3::SatResult {
+        if self.extra_constraints.iter().any(|constraint| !constraint.constraint.is_valid()) {
+            return z3::SatResult::Unsat;
+        }
+
         let cfg = z3::Config::new();
         let ctx = z3::Context::new(&cfg);
         let sudoku = SudokuContext::create(ctx);
@@ -283,6 +369,7 @@ impl MyApp {
                 }
             }
         }
+        constraints.extend(self.extra_constraints.iter().map(|constraint| constraint.constraint.dyn_clone()));
 
         for constraint in &constraints {
             constraint.apply(&solver, &sudoku);
@@ -311,10 +398,129 @@ impl MyApp {
 
         return result;
     }
+
+    fn extra_constraints_ui(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        egui::TopBottomPanel::top("constraint_list")
+            .height_range(ui.available_height() / 3.0..=ui.available_height() / 3.0)
+            .show_inside(ui, |ui| {
+                if ui.button("Add Constraint").clicked() {
+                    self.selected_constraint = Some(self.extra_constraints.len());
+                    let mut colors_to_avoid: Vec<_> =
+                        self.extra_constraints.iter().map(|c| c.color).collect();
+                    colors_to_avoid.extend_from_slice(&[ui
+                        .style()
+                        .visuals
+                        .widgets
+                        .active
+                        .text_color()]);
+                    let color = color::next_distinguishable_color(
+                        &colors_to_avoid,
+                        ui.style().visuals.extreme_bg_color,
+                    );
+                    self.extra_constraints.push(ConstraintUi {
+                        color,
+                        constraint: constraint::make_default_constraint(),
+                    });
+                }
+                ui.add_space(5.0);
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .stick_to_bottom(true)
+                    .show(ui, |ui| {
+                        for constraint_index in 0..self.extra_constraints.len() {
+                            let mut should_break = false;
+                            ui.horizontal(|ui| {
+                                let selected = self.selected_constraint.contains(&constraint_index);
+                                let mut text = egui::RichText::new(
+                                    self.extra_constraints[constraint_index].constraint.name(),
+                                );
+                                if !selected {
+                                    text =
+                                        text.color(self.extra_constraints[constraint_index].color);
+                                }
+                                if ui.selectable_label(selected, text).clicked() {
+                                    self.selected_constraint = Some(constraint_index);
+                                }
+                                if ui
+                                    .button(
+                                        egui::RichText::new("Delete")
+                                            .text_style(egui::TextStyle::Small),
+                                    )
+                                    .clicked()
+                                {
+                                    self.selected_constraint = None;
+                                    self.extra_constraints.remove(constraint_index);
+                                    should_break = true;
+                                }
+                            });
+                            if should_break {
+                                break;
+                            }
+                        }
+                    });
+            });
+
+        ui.add_space(10.0);
+
+        if let Some(selected_constraint) = self.selected_constraint {
+            let mut constraint = &mut self.extra_constraints[selected_constraint];
+
+            let mut constraint_name = constraint.constraint.name();
+            egui::ComboBox::from_id_source("constraint_type")
+                .selected_text(constraint.constraint.name())
+                .show_ui(ui, |ui| {
+                    let mut constraints: Vec<_> =
+                        constraint::CONFIGURABLES.keys().copied().collect();
+                    constraints.sort();
+                    for constraint in constraints {
+                        ui.selectable_value(&mut constraint_name, constraint, constraint);
+                    }
+                });
+            if constraint_name != constraint.constraint.name() {
+                if let Some(constraint_creator) = constraint::CONFIGURABLES.get(constraint_name) {
+                    let mut new_constraint = constraint_creator();
+                    let new_max_highlighted = new_constraint.get_max_highlighted_cells();
+                    if let (Some(new_highlighted), Some(old_highlighted)) = (
+                        new_constraint.get_highlighted_cells(),
+                        constraint.constraint.get_highlighted_cells(),
+                    ) {
+                        if new_max_highlighted < old_highlighted.len() {
+                            new_highlighted
+                                .extend_from_slice(&old_highlighted[..new_max_highlighted]);
+                        } else {
+                            new_highlighted.extend_from_slice(old_highlighted);
+                        }
+                    }
+                    let color = constraint.color;
+                    self.extra_constraints[selected_constraint] = ConstraintUi {
+                        color,
+                        constraint: new_constraint,
+                    };
+                    constraint = &mut self.extra_constraints[selected_constraint];
+                }
+            }
+
+            ui.add_space(5.0);
+
+            if constraint.constraint.get_highlighted_cells().is_some() {
+                if constraint.constraint.get_max_highlighted_cells() == 1 {
+                    ui.label("Right click to select the cell for this constraint");
+                } else {
+                    ui.label("Right click to add cells to this constraint");
+                }
+                ui.add_space(5.0);
+            }
+            constraint.constraint.configure(ctx, ui);
+        }
+    }
 }
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::SidePanel::right("constraints_panel").show(ctx, |ui| {
+            self.extra_constraints_ui(ctx, ui);
+            ui.set_min_width(ctx.available_rect().width() / 3.0);
+        });
         egui::CentralPanel::default()
             .frame(egui::Frame::canvas(&ctx.style()).inner_margin(10f32))
             .show(ctx, |ui| {
@@ -332,6 +538,8 @@ impl eframe::App for MyApp {
                             &mut self.grid,
                             &mut self.selected_cell,
                             &mut self.solution,
+                            &mut self.extra_constraints,
+                            self.selected_constraint,
                         ));
                     });
                 });
@@ -344,14 +552,6 @@ pub fn run() {
     eframe::run_native(
         "Sudoku Solver",
         options,
-        Box::new(|ctx| {
-            let mut new_style = (*ctx.egui_ctx.style()).clone();
-            for font in new_style.text_styles.values_mut() {
-                font.size *= 3.0;
-            }
-            ctx.egui_ctx.set_style(new_style);
-
-            Box::new(MyApp::new())
-        }),
+        Box::new(|_| Box::new(MyApp::new())),
     );
 }

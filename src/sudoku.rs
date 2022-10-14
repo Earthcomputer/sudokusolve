@@ -65,6 +65,10 @@ impl SudokuContext {
         self.borrow_bools()
     }
 
+    pub fn ints(&self) -> &Z3Allocator<z3::ast::Int> {
+        self.borrow_ints()
+    }
+
     pub fn const_int(&self, n: i32) -> &z3::ast::Int {
         if (0..10).contains(&n) {
             self.with_digits(|digits| &digits[n as usize])
