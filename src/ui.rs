@@ -1,5 +1,5 @@
 use crate::constraint::{
-    ConfigurableConstraint, Constraint, DigitsConstraint, GivenDigitConstraint,
+    ConfigurableConstraint, Constraint, DigitDefinitionConstraint, GivenDigitConstraint,
     LatinSquareConstraint, StandardBoxesConstraint,
 };
 use crate::sudoku::{SudokuContext, SUDOKU_SIZE};
@@ -462,7 +462,7 @@ impl MyApp {
         let solver = z3::Solver::new(sudoku.ctx());
 
         let mut constraints: Vec<Box<dyn Constraint>> = Vec::new();
-        constraints.push(Box::new(DigitsConstraint));
+        constraints.push(Box::new(DigitDefinitionConstraint));
         constraints.push(Box::new(LatinSquareConstraint));
         constraints.push(Box::new(StandardBoxesConstraint));
         for row in 0..SUDOKU_SIZE {
