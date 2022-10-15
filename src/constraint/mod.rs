@@ -1,4 +1,5 @@
 mod anti_knight;
+mod diagonal;
 mod digit_definition;
 mod given_digit;
 mod killer_cage;
@@ -18,6 +19,7 @@ pub use latin_square::*;
 pub use standard_boxes::*;
 
 use anti_knight::AntiKnightConstraint;
+use diagonal::DiagonalConstraint;
 use killer_cage::KillerCageConstraint;
 use little_killer::LittleKillerConstraint;
 use thermo::ThermoConstraint;
@@ -37,10 +39,14 @@ pub trait ConfigurableConstraint: Constraint + DynClone<dyn Constraint> {
     fn draw(&self, context: &SudokuDrawContext) {
         context.default_draw();
     }
+    fn always_draw(&self) -> bool {
+        false
+    }
 }
 
 pub static CONFIGURABLES: phf::Map<&'static str, fn() -> Box<dyn ConfigurableConstraint>> = phf::phf_map! {
     "Anti-Knight" => || Box::new(AntiKnightConstraint::default()),
+    "Diagonal" => || Box::new(DiagonalConstraint::default()),
     "Killer Cage" => || Box::new(KillerCageConstraint::default()),
     "Little Killer" => || Box::new(LittleKillerConstraint::default()),
     "Thermo" => || Box::new(ThermoConstraint::default()),

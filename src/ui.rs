@@ -161,7 +161,9 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
 
             let mut n_times_cell_constrained = vec![0; self.width * self.height];
             for (constraint_index, constraint) in self.extra_constraints.iter_mut().enumerate() {
-                if self.selected_extra_constraint.contains(&constraint_index) {
+                if self.selected_extra_constraint.contains(&constraint_index)
+                    && !constraint.constraint.always_draw()
+                {
                     continue;
                 }
 
