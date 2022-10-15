@@ -1,3 +1,4 @@
+mod anti_knight;
 mod digit_definition;
 mod given_digit;
 mod killer_cage;
@@ -14,8 +15,10 @@ pub use digit_definition::*;
 pub use given_digit::*;
 pub use latin_square::*;
 pub use standard_boxes::*;
-use crate::constraint::killer_cage::KillerCageConstraint;
-use crate::constraint::little_killer::LittleKillerConstraint;
+
+use anti_knight::AntiKnightConstraint;
+use killer_cage::KillerCageConstraint;
+use little_killer::LittleKillerConstraint;
 
 pub trait Constraint {
     fn apply<'a>(&self, solver: &z3::Solver, context: &'a SudokuContext);
@@ -35,6 +38,7 @@ pub trait ConfigurableConstraint: Constraint + DynClone<dyn Constraint> {
 }
 
 pub static CONFIGURABLES: phf::Map<&'static str, fn() -> Box<dyn ConfigurableConstraint>> = phf::phf_map! {
+    "Anti-Knight" => || Box::new(AntiKnightConstraint::default()),
     "Killer Cage" => || Box::new(KillerCageConstraint::default()),
     "Little Killer" => || Box::new(LittleKillerConstraint::default()),
 };
