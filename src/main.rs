@@ -1,4 +1,5 @@
 #![feature(array_chunks)]
+#![feature(array_windows)]
 #![feature(negative_impls)]
 #![feature(option_result_contains)]
 

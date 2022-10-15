@@ -5,6 +5,7 @@ mod killer_cage;
 mod latin_square;
 mod little_killer;
 mod standard_boxes;
+mod thermo;
 
 use crate::sudoku::SudokuContext;
 use crate::ui::SudokuDrawContext;
@@ -19,6 +20,7 @@ pub use standard_boxes::*;
 use anti_knight::AntiKnightConstraint;
 use killer_cage::KillerCageConstraint;
 use little_killer::LittleKillerConstraint;
+use thermo::ThermoConstraint;
 
 pub trait Constraint {
     fn apply<'a>(&self, solver: &z3::Solver, context: &'a SudokuContext);
@@ -41,6 +43,7 @@ pub static CONFIGURABLES: phf::Map<&'static str, fn() -> Box<dyn ConfigurableCon
     "Anti-Knight" => || Box::new(AntiKnightConstraint::default()),
     "Killer Cage" => || Box::new(KillerCageConstraint::default()),
     "Little Killer" => || Box::new(LittleKillerConstraint::default()),
+    "Thermo" => || Box::new(ThermoConstraint::default()),
 };
 
 pub fn make_default_constraint() -> Box<dyn ConfigurableConstraint> {
