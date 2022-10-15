@@ -407,12 +407,31 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
     }
 }
 
+enum SolveResult {
+    Ok,
+    Unsolvable,
+    TimedOut,
+    InvalidInput,
+}
+
+impl SolveResult {
+    fn message(&self) -> &'static str {
+        match self {
+            SolveResult::Ok => "",
+            SolveResult::Unsolvable => "Unsolvable",
+            SolveResult::TimedOut => "Solver timed out",
+            SolveResult::InvalidInput => "Invalid input",
+        }
+    }
+}
+
 struct MyApp {
     grid: [Option<i32>; SUDOKU_SIZE * SUDOKU_SIZE],
     selected_cell: Option<sudoku::Cell>,
     solution: Option<Vec<i32>>,
     extra_constraints: Vec<ConstraintUi>,
     selected_constraint: Option<usize>,
+    error_message: &'static str,
 }
 
 impl MyApp {
@@ -423,19 +442,21 @@ impl MyApp {
             solution: None,
             extra_constraints: Vec::new(),
             selected_constraint: None,
+            error_message: "",
         }
     }
 
-    fn solve(&mut self) -> z3::SatResult {
+    fn solve(&mut self) -> SolveResult {
         if self
             .extra_constraints
             .iter()
             .any(|constraint| !constraint.constraint.is_valid())
         {
-            return z3::SatResult::Unsat;
+            return SolveResult::InvalidInput;
         }
 
-        let cfg = z3::Config::new();
+        let mut cfg = z3::Config::new();
+        cfg.set_param_value("timeout", "5000");
         let ctx = z3::Context::new(&cfg);
         let sudoku = SudokuContext::create(ctx);
         let solver = z3::Solver::new(sudoku.ctx());
@@ -466,9 +487,11 @@ impl MyApp {
         }
 
         let result = solver.check();
-        if result != z3::SatResult::Sat {
-            return result;
-        }
+        match result {
+            z3::SatResult::Unsat => return SolveResult::Unsolvable,
+            z3::SatResult::Unknown => return SolveResult::TimedOut,
+            z3::SatResult::Sat => {}
+        };
 
         let model = solver
             .get_model()
@@ -486,7 +509,7 @@ impl MyApp {
         }
         self.solution = Some(solution);
 
-        return result;
+        return SolveResult::Ok;
     }
 
     fn extra_constraints_ui(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
@@ -615,16 +638,23 @@ impl eframe::App for MyApp {
             .frame(egui::Frame::canvas(&ctx.style()).inner_margin(10f32))
             .show(ctx, |ui| {
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-                    if ui
-                        .button(egui::RichText::new("Solve").font({
-                            let mut font = egui::TextStyle::Heading.resolve(ui.style());
-                            font.size *= 2.0;
-                            font
-                        }))
-                        .clicked()
-                    {
-                        self.solve();
-                    }
+                    ui.horizontal(|ui| {
+                        if ui
+                            .button(egui::RichText::new("Solve").font({
+                                let mut font = egui::TextStyle::Heading.resolve(ui.style());
+                                font.size *= 2.0;
+                                font
+                            }))
+                            .clicked()
+                        {
+                            let result = self.solve();
+                            self.error_message = result.message();
+                        }
+                        ui.heading(
+                            egui::RichText::new(self.error_message)
+                                .color(ui.style().visuals.error_fg_color),
+                        );
+                    });
                     ui.add_space(5.0);
                     ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
                         ui.heading(egui::RichText::new("Sudoku Solver").font({
