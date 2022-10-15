@@ -158,6 +158,76 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
                 min: egui::Pos2 { x: left, y: top },
                 ..
             } = ui.max_rect();
+
+            let mut n_times_cell_constrained = vec![0; self.width * self.height];
+            for (constraint_index, constraint) in self.extra_constraints.iter_mut().enumerate() {
+                if self.selected_extra_constraint.contains(&constraint_index) {
+                    continue;
+                }
+
+                let context = SudokuDrawContext::new(
+                    self.width,
+                    self.height,
+                    left,
+                    top,
+                    cell_size,
+                    constraint.color,
+                    ui.painter(),
+                    ui.style(),
+                );
+                constraint.constraint.draw(&context);
+                if !context.default_draw.get() {
+                    if let Some(cells) = constraint.constraint.get_highlighted_cells() {
+                        for cell in cells {
+                            if n_times_cell_constrained[cell.col + self.width * cell.row] == 0 {
+                                n_times_cell_constrained[cell.col + self.width * cell.row] = 1;
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                if let Some(cells) = constraint.constraint.get_highlighted_cells() {
+                    for cell in cells {
+                        let mut cell_rect =
+                            Self::cell_rect(left, top, cell_size, cell.row, cell.col);
+                        n_times_cell_constrained[cell.col + self.width * cell.row] += 1;
+                        let amt_to_shrink = ((2 * n_times_cell_constrained
+                            [cell.col + self.width * cell.row])
+                            as f32)
+                            .min(cell_rect.width() * 0.5 - 1.0);
+                        cell_rect = cell_rect.shrink(amt_to_shrink);
+                        ui.painter().rect_stroke(
+                            cell_rect,
+                            2f32,
+                            egui::Stroke::new(1f32, constraint.color),
+                        );
+                    }
+                }
+            }
+
+            if let Some(selected_constraint) = self.selected_extra_constraint {
+                let constraint = &mut self.extra_constraints[selected_constraint];
+                if let Some(cells) = constraint.constraint.get_highlighted_cells() {
+                    for (index, cell) in cells.iter().enumerate() {
+                        let cell_rect = Self::cell_rect(left, top, cell_size, cell.row, cell.col)
+                            .shrink(CELL_PADDING);
+                        ui.painter().rect_stroke(
+                            cell_rect,
+                            2f32,
+                            egui::Stroke::new(3f32, constraint.color),
+                        );
+                        ui.painter().text(
+                            cell_rect.min + egui::Vec2::splat(CELL_PADDING),
+                            egui::Align2::LEFT_TOP,
+                            index + 1,
+                            egui::FontSelection::Default.resolve(ui.style()),
+                            constraint.color,
+                        );
+                    }
+                }
+            }
+
             for x in 0..=self.width {
                 let mut stroke = ui.style().visuals.widgets.noninteractive.fg_stroke;
                 stroke.width = if x % 3 == 0 { 3f32 } else { 1f32 };
@@ -230,75 +300,6 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
                                 clicked_cell = true;
                             }
                         }
-                    }
-                }
-            }
-
-            let mut n_times_cell_constrained = vec![0; self.width * self.height];
-            for (constraint_index, constraint) in self.extra_constraints.iter_mut().enumerate() {
-                if self.selected_extra_constraint.contains(&constraint_index) {
-                    continue;
-                }
-
-                let context = SudokuDrawContext::new(
-                    self.width,
-                    self.height,
-                    left,
-                    top,
-                    cell_size,
-                    constraint.color,
-                    ui.painter(),
-                    ui.style(),
-                );
-                constraint.constraint.draw(&context);
-                if !context.default_draw.get() {
-                    if let Some(cells) = constraint.constraint.get_highlighted_cells() {
-                        for cell in cells {
-                            if n_times_cell_constrained[cell.col + self.width * cell.row] == 0 {
-                                n_times_cell_constrained[cell.col + self.width * cell.row] = 1;
-                            }
-                        }
-                    }
-                    continue;
-                }
-
-                if let Some(cells) = constraint.constraint.get_highlighted_cells() {
-                    for cell in cells {
-                        let mut cell_rect =
-                            Self::cell_rect(left, top, cell_size, cell.row, cell.col);
-                        n_times_cell_constrained[cell.col + self.width * cell.row] += 1;
-                        let amt_to_shrink = ((2 * n_times_cell_constrained
-                            [cell.col + self.width * cell.row])
-                            as f32)
-                            .min(cell_rect.width() * 0.5 - 1.0);
-                        cell_rect = cell_rect.shrink(amt_to_shrink);
-                        ui.painter().rect_stroke(
-                            cell_rect,
-                            2f32,
-                            egui::Stroke::new(1f32, constraint.color),
-                        );
-                    }
-                }
-            }
-
-            if let Some(selected_constraint) = self.selected_extra_constraint {
-                let constraint = &mut self.extra_constraints[selected_constraint];
-                if let Some(cells) = constraint.constraint.get_highlighted_cells() {
-                    for (index, cell) in cells.iter().enumerate() {
-                        let cell_rect = Self::cell_rect(left, top, cell_size, cell.row, cell.col)
-                            .shrink(CELL_PADDING);
-                        ui.painter().rect_stroke(
-                            cell_rect,
-                            2f32,
-                            egui::Stroke::new(3f32, constraint.color),
-                        );
-                        ui.painter().text(
-                            cell_rect.min + egui::Vec2::splat(CELL_PADDING),
-                            egui::Align2::LEFT_TOP,
-                            index + 1,
-                            egui::FontSelection::Default.resolve(ui.style()),
-                            constraint.color,
-                        );
                     }
                 }
             }
