@@ -52,19 +52,29 @@ impl std::fmt::Display for Cell {
 
 #[self_referencing(pub_extras)]
 pub struct SudokuContext {
-    pub ctx: z3::Context,
+    ctx: z3::Context,
     #[borrows(ctx)]
     #[covariant]
-    pub bools: Z3Allocator<z3::ast::Bool<'this>>,
+    bools: Z3Allocator<z3::ast::Bool<'this>>,
     #[borrows(ctx)]
     #[covariant]
     ints: Z3Allocator<z3::ast::Int<'this>>,
     #[borrows(ctx)]
     #[covariant]
+    patterns: Z3Allocator<z3::Pattern<'this>>,
+    #[borrows(ctx)]
+    #[covariant]
+    sets: Z3Allocator<z3::ast::Set<'this>>,
+    #[borrows(ctx)]
+    #[covariant]
     digits: [z3::ast::Int<'this>; 10],
 
-    pub width: usize,
-    pub height: usize,
+    #[borrows(ctx)]
+    #[covariant]
+    int_type: z3::Sort<'this>,
+
+    width: usize,
+    height: usize,
     #[borrows(ctx)]
     #[covariant]
     cells: Vec<z3::ast::Int<'this>>,
@@ -76,7 +86,10 @@ impl SudokuContext {
             ctx,
             bools_builder: |_| Z3Allocator::new(),
             ints_builder: |_| Z3Allocator::new(),
+            patterns_builder: |_| Z3Allocator::new(),
+            sets_builder: |_| Z3Allocator::new(),
             digits_builder: |ctx| array::from_fn(|i| z3::ast::Int::from_u64(ctx, i as u64)),
+            int_type_builder: |ctx| z3::Sort::int(ctx),
             width: SUDOKU_SIZE,
             height: SUDOKU_SIZE,
             cells_builder: |ctx| {
@@ -100,13 +113,25 @@ impl SudokuContext {
         self.borrow_ints()
     }
 
+    pub fn patterns(&self) -> &Z3Allocator<z3::Pattern> {
+        self.borrow_patterns()
+    }
+
+    pub fn sets(&self) -> &Z3Allocator<z3::ast::Set> {
+        self.borrow_sets()
+    }
+
     pub fn const_int(&self, n: i32) -> &z3::ast::Int {
         if (0..10).contains(&n) {
             self.with_digits(|digits| &digits[n as usize])
         } else {
             self.borrow_ints()
-                .alloc(z3::ast::Int::from_u64(self.ctx(), n as u64))
+                .alloc(z3::ast::Int::from_i64(self.ctx(), n as i64))
         }
+    }
+
+    pub fn int_type(&self) -> &z3::Sort {
+        self.borrow_int_type()
     }
 
     pub fn get_cell(&self, row: usize, col: usize) -> &z3::ast::Int {

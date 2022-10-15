@@ -6,6 +6,7 @@ mod killer_cage;
 mod kropki;
 mod latin_square;
 mod little_killer;
+mod renban;
 mod standard_boxes;
 mod thermo;
 
@@ -24,6 +25,7 @@ use diagonal::DiagonalConstraint;
 use killer_cage::KillerCageConstraint;
 use kropki::{BlackKropkiConstraint, WhiteKropkiConstraint};
 use little_killer::LittleKillerConstraint;
+use renban::RenbanConstraint;
 use thermo::ThermoConstraint;
 
 pub trait Constraint {
@@ -55,6 +57,7 @@ pub static CONFIGURABLES: phf::Map<&'static str, fn() -> Box<dyn ConfigurableCon
     "Diagonal" => || Box::new(DiagonalConstraint::default()),
     "Killer Cage" => || Box::new(KillerCageConstraint::default()),
     "Little Killer" => || Box::new(LittleKillerConstraint::default()),
+    "Renban" => || Box::new(RenbanConstraint::default()),
     "Thermo" => || Box::new(ThermoConstraint::default()),
     "White Kropki Dot" => || Box::new(WhiteKropkiConstraint::default()),
 };
