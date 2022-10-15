@@ -11,6 +11,65 @@ struct ConstraintUi {
     constraint: Box<dyn ConfigurableConstraint>,
 }
 
+pub const CELL_PADDING: f32 = 3.0;
+
+pub struct SudokuDrawContext<'a> {
+    pub width: usize,
+    pub height: usize,
+    left: f32,
+    top: f32,
+    cell_size: f32,
+    pub color: egui::Color32,
+    pub painter: &'a egui::Painter,
+    pub style: &'a egui::Style,
+    default_draw: std::cell::Cell<bool>,
+}
+
+impl<'a> SudokuDrawContext<'a> {
+    fn new(
+        width: usize,
+        height: usize,
+        left: f32,
+        top: f32,
+        cell_size: f32,
+        color: egui::Color32,
+        painter: &'a egui::Painter,
+        style: &'a egui::Style,
+    ) -> Self {
+        Self {
+            width,
+            height,
+            left,
+            top,
+            cell_size,
+            color,
+            painter,
+            style,
+            default_draw: std::cell::Cell::new(false),
+        }
+    }
+
+    pub fn cell_rect(&self, row: usize, col: usize) -> egui::Rect {
+        egui::Rect::from_min_size(
+            egui::Pos2::new(
+                self.left + col as f32 * self.cell_size,
+                self.top + row as f32 * self.cell_size,
+            ),
+            egui::Vec2::splat(self.cell_size),
+        )
+    }
+
+    pub fn get_font(&self, cell_ratio: f32) -> egui::FontId {
+        let mut font = egui::TextStyle::Body.resolve(self.style);
+        font.size = (self.cell_size * cell_ratio).max(1.0);
+        font
+    }
+
+    pub fn default_draw(&self) {
+        self.default_draw.set(true);
+    }
+}
+
 struct SudokuWidget<'a> {
     width: usize,
     height: usize,
@@ -72,7 +131,7 @@ impl<'a> SudokuWidget<'a> {
         color: egui::Color32,
     ) {
         let mut font = egui::FontSelection::Default.resolve(ui.style());
-        font.size = cell_size / ui.input().pixels_per_point * 0.8;
+        font.size = cell_size * 0.8;
         ui.painter().text(
             Self::cell_rect(left, top, cell_size, row, col).center(),
             egui::Align2::CENTER_CENTER,
@@ -181,6 +240,28 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
                     continue;
                 }
 
+                let context = SudokuDrawContext::new(
+                    self.width,
+                    self.height,
+                    left,
+                    top,
+                    cell_size,
+                    constraint.color,
+                    ui.painter(),
+                    ui.style(),
+                );
+                constraint.constraint.draw(&context);
+                if !context.default_draw.get() {
+                    if let Some(cells) = constraint.constraint.get_highlighted_cells() {
+                        for cell in cells {
+                            if n_times_cell_constrained[cell.col + self.width * cell.row] == 0 {
+                                n_times_cell_constrained[cell.col + self.width * cell.row] = 1;
+                            }
+                        }
+                    }
+                    continue;
+                }
+
                 if let Some(cells) = constraint.constraint.get_highlighted_cells() {
                     for cell in cells {
                         let mut cell_rect =
@@ -204,15 +285,15 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
                 let constraint = &mut self.extra_constraints[selected_constraint];
                 if let Some(cells) = constraint.constraint.get_highlighted_cells() {
                     for (index, cell) in cells.iter().enumerate() {
-                        let cell_rect =
-                            Self::cell_rect(left, top, cell_size, cell.row, cell.col).shrink(2.0);
+                        let cell_rect = Self::cell_rect(left, top, cell_size, cell.row, cell.col)
+                            .shrink(CELL_PADDING);
                         ui.painter().rect_stroke(
                             cell_rect,
                             2f32,
                             egui::Stroke::new(3f32, constraint.color),
                         );
                         ui.painter().text(
-                            cell_rect.min + egui::Vec2::new(2.0, 2.0),
+                            cell_rect.min + egui::Vec2::splat(CELL_PADDING),
                             egui::Align2::LEFT_TOP,
                             index + 1,
                             egui::FontSelection::Default.resolve(ui.style()),
@@ -226,7 +307,8 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
                 let mut stroke = ui.style().visuals.selection.stroke;
                 stroke.width = 2f32;
                 ui.painter().rect_stroke(
-                    Self::cell_rect(left, top, cell_size, selected.row, selected.col).shrink(2.0),
+                    Self::cell_rect(left, top, cell_size, selected.row, selected.col)
+                        .shrink(CELL_PADDING),
                     2f32,
                     stroke,
                 );
@@ -345,7 +427,11 @@ impl MyApp {
     }
 
     fn solve(&mut self) -> z3::SatResult {
-        if self.extra_constraints.iter().any(|constraint| !constraint.constraint.is_valid()) {
+        if self
+            .extra_constraints
+            .iter()
+            .any(|constraint| !constraint.constraint.is_valid())
+        {
             return z3::SatResult::Unsat;
         }
 
@@ -369,7 +455,11 @@ impl MyApp {
                 }
             }
         }
-        constraints.extend(self.extra_constraints.iter().map(|constraint| constraint.constraint.dyn_clone()));
+        constraints.extend(
+            self.extra_constraints
+                .iter()
+                .map(|constraint| constraint.constraint.dyn_clone()),
+        );
 
         for constraint in &constraints {
             constraint.apply(&solver, &sudoku);
@@ -525,22 +615,43 @@ impl eframe::App for MyApp {
             .frame(egui::Frame::canvas(&ctx.style()).inner_margin(10f32))
             .show(ctx, |ui| {
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-                    if ui.button("Solve").clicked() {
+                    if ui
+                        .button(egui::RichText::new("Solve").font({
+                            let mut font = egui::TextStyle::Heading.resolve(ui.style());
+                            font.size *= 2.0;
+                            font
+                        }))
+                        .clicked()
+                    {
                         self.solve();
                     }
                     ui.add_space(5.0);
                     ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
-                        ui.heading("Sudoku Solver");
+                        ui.heading(egui::RichText::new("Sudoku Solver").font({
+                            let mut font = egui::TextStyle::Heading.resolve(ui.style());
+                            font.size *= 3.0;
+                            font
+                        }));
                         ui.add_space(5.0);
-                        ui.add(SudokuWidget::new(
-                            SUDOKU_SIZE,
-                            SUDOKU_SIZE,
-                            &mut self.grid,
-                            &mut self.selected_cell,
-                            &mut self.solution,
-                            &mut self.extra_constraints,
-                            self.selected_constraint,
-                        ));
+                        egui::CentralPanel::default()
+                            .frame(
+                                egui::Frame::canvas(&ctx.style())
+                                    .inner_margin(20f32)
+                                    .stroke(egui::Stroke::none()),
+                            )
+                            .show_inside(ui, |ui| {
+                                ui.horizontal_centered(|ui| {
+                                    ui.add(SudokuWidget::new(
+                                        SUDOKU_SIZE,
+                                        SUDOKU_SIZE,
+                                        &mut self.grid,
+                                        &mut self.selected_cell,
+                                        &mut self.solution,
+                                        &mut self.extra_constraints,
+                                        self.selected_constraint,
+                                    ));
+                                });
+                            });
                     });
                 });
             });

@@ -1,10 +1,10 @@
-use std::array;
-use ouroboros::self_referencing;
 use crate::alloc::Z3Allocator;
+use ouroboros::self_referencing;
+use std::array;
 
 pub const SUDOKU_SIZE: usize = 9;
 
-#[derive(Debug, Default, Eq, PartialEq, Copy, Clone)]
+#[derive(Debug, Default, Eq, PartialEq, Copy, Clone, Hash)]
 pub struct Cell {
     pub row: usize,
     pub col: usize,
@@ -13,6 +13,34 @@ pub struct Cell {
 impl Cell {
     pub fn new(row: usize, col: usize) -> Cell {
         Cell { row, col }
+    }
+
+    pub fn up(&self) -> Cell {
+        Cell {
+            row: self.row - 1,
+            col: self.col,
+        }
+    }
+
+    pub fn down(&self) -> Cell {
+        Cell {
+            row: self.row + 1,
+            col: self.col,
+        }
+    }
+
+    pub fn left(&self) -> Cell {
+        Cell {
+            row: self.row,
+            col: self.col - 1,
+        }
+    }
+
+    pub fn right(&self) -> Cell {
+        Cell {
+            row: self.row,
+            col: self.col + 1,
+        }
     }
 }
 
@@ -51,10 +79,13 @@ impl SudokuContext {
             digits_builder: |ctx| array::from_fn(|i| z3::ast::Int::from_u64(ctx, i as u64)),
             width: SUDOKU_SIZE,
             height: SUDOKU_SIZE,
-            cells_builder: |ctx| (0..SUDOKU_SIZE * SUDOKU_SIZE)
-                .map(|_| z3::ast::Int::fresh_const(ctx, "C"))
-                .collect()
-        }.build()
+            cells_builder: |ctx| {
+                (0..SUDOKU_SIZE * SUDOKU_SIZE)
+                    .map(|_| z3::ast::Int::fresh_const(ctx, "C"))
+                    .collect()
+            },
+        }
+        .build()
     }
 
     pub fn ctx(&self) -> &z3::Context {
@@ -73,7 +104,8 @@ impl SudokuContext {
         if (0..10).contains(&n) {
             self.with_digits(|digits| &digits[n as usize])
         } else {
-            self.borrow_ints().alloc(z3::ast::Int::from_u64(self.ctx(), n as u64))
+            self.borrow_ints()
+                .alloc(z3::ast::Int::from_u64(self.ctx(), n as u64))
         }
     }
 
