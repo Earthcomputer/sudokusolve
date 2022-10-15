@@ -42,6 +42,9 @@ pub trait ConfigurableConstraint: Constraint + DynClone<dyn Constraint> {
     fn always_draw(&self) -> bool {
         false
     }
+    fn draw_depth(&self) -> i32 {
+        0
+    }
 }
 
 pub static CONFIGURABLES: phf::Map<&'static str, fn() -> Box<dyn ConfigurableConstraint>> = phf::phf_map! {

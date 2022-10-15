@@ -160,7 +160,11 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
             } = ui.max_rect();
 
             let mut n_times_cell_constrained = vec![0; self.width * self.height];
-            for (constraint_index, constraint) in self.extra_constraints.iter_mut().enumerate() {
+            let mut depth_sorted_constraints: Vec<_> =
+                self.extra_constraints.iter_mut().enumerate().collect();
+            depth_sorted_constraints
+                .sort_by_key(|(_, constraint)| -constraint.constraint.draw_depth());
+            for (constraint_index, constraint) in depth_sorted_constraints {
                 if self.selected_extra_constraint.contains(&constraint_index)
                     && !constraint.constraint.always_draw()
                 {

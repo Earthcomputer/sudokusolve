@@ -118,4 +118,8 @@ impl ConfigurableConstraint for DiagonalConstraint {
     fn always_draw(&self) -> bool {
         true
     }
+
+    fn draw_depth(&self) -> i32 {
+        -10
+    }
 }

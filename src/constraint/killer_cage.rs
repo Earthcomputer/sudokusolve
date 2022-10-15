@@ -244,6 +244,10 @@ impl ConfigurableConstraint for KillerCageConstraint {
             }
         }
     }
+
+    fn draw_depth(&self) -> i32 {
+        -5
+    }
 }
 
 impl KillerCageConstraint {
