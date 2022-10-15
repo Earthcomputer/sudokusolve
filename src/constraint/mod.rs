@@ -3,6 +3,7 @@ mod diagonal;
 mod digit_definition;
 mod given_digit;
 mod killer_cage;
+mod kropki;
 mod latin_square;
 mod little_killer;
 mod standard_boxes;
@@ -21,6 +22,7 @@ pub use standard_boxes::*;
 use anti_knight::AntiKnightConstraint;
 use diagonal::DiagonalConstraint;
 use killer_cage::KillerCageConstraint;
+use kropki::{BlackKropkiConstraint, WhiteKropkiConstraint};
 use little_killer::LittleKillerConstraint;
 use thermo::ThermoConstraint;
 
@@ -49,10 +51,12 @@ pub trait ConfigurableConstraint: Constraint + DynClone<dyn Constraint> {
 
 pub static CONFIGURABLES: phf::Map<&'static str, fn() -> Box<dyn ConfigurableConstraint>> = phf::phf_map! {
     "Anti-Knight" => || Box::new(AntiKnightConstraint::default()),
+    "Black Kropki Dot" => || Box::new(BlackKropkiConstraint::default()),
     "Diagonal" => || Box::new(DiagonalConstraint::default()),
     "Killer Cage" => || Box::new(KillerCageConstraint::default()),
     "Little Killer" => || Box::new(LittleKillerConstraint::default()),
     "Thermo" => || Box::new(ThermoConstraint::default()),
+    "White Kropki Dot" => || Box::new(WhiteKropkiConstraint::default()),
 };
 
 pub fn make_default_constraint() -> Box<dyn ConfigurableConstraint> {
