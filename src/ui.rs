@@ -647,7 +647,7 @@ impl eframe::App for MyApp {
             .frame(egui::Frame::canvas(&ctx.style()).inner_margin(10f32))
             .show(ctx, |ui| {
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-                    ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Max), |ui| {
                         if ui
                             .button(egui::RichText::new("Solve").font({
                                 let mut font = egui::TextStyle::Heading.resolve(ui.style());
