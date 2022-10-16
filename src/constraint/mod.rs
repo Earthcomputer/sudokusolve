@@ -1,4 +1,5 @@
 mod anti_knight;
+mod arrow;
 mod diagonal;
 mod digit_definition;
 mod german_whisper;
@@ -23,6 +24,7 @@ pub use latin_square::*;
 pub use standard_boxes::*;
 
 use anti_knight::AntiKnightConstraint;
+use arrow::ArrowConstraint;
 use diagonal::DiagonalConstraint;
 use german_whisper::GermanWhisperConstraint;
 use killer_cage::KillerCageConstraint;
@@ -57,6 +59,7 @@ pub trait ConfigurableConstraint: Constraint + DynClone<dyn Constraint> {
 
 pub static CONFIGURABLES: phf::Map<&'static str, fn() -> Box<dyn ConfigurableConstraint>> = phf::phf_map! {
     "Anti-Knight" => || Box::new(AntiKnightConstraint::default()),
+    "Arrow" => || Box::new(ArrowConstraint::default()),
     "Black Kropki Dot" => || Box::new(BlackKropkiConstraint::default()),
     "Diagonal" => || Box::new(DiagonalConstraint::default()),
     "German Whisper" => || Box::new(GermanWhisperConstraint::default()),
