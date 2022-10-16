@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)] // for self_referencing
+
 use crate::alloc::Z3Allocator;
 use ouroboros::self_referencing;
 use std::array;
@@ -50,7 +52,7 @@ impl std::fmt::Display for Cell {
     }
 }
 
-#[self_referencing(pub_extras)]
+#[self_referencing]
 pub struct SudokuContext {
     ctx: z3::Context,
     #[borrows(ctx)]

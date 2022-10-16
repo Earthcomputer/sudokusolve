@@ -44,6 +44,7 @@ fn rgb_to_lab(rgb: egui::Color32) -> (f64, f64, f64) {
     (0f64.max(116.0 * y - 16.0), 500.0 * (x - y), 200.0 * (y - z))
 }
 
+#[allow(dead_code)] // might be used in the future
 fn lab_to_rgb(l: f64, a: f64, b: f64) -> egui::Color32 {
     let y = (l + 16.0) / 116.0;
     let x = a / 500.0 + y;

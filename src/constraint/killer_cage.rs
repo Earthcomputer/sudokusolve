@@ -61,7 +61,7 @@ impl ConfigurableConstraint for KillerCageConstraint {
     }
 
     fn name(&self) -> &'static str {
-        return "Killer Cage";
+        "Killer Cage"
     }
 
     fn draw(&self, context: &SudokuDrawContext) {

@@ -58,19 +58,19 @@ pub trait ConfigurableConstraint: Constraint + DynClone<dyn Constraint> {
 }
 
 pub static CONFIGURABLES: phf::Map<&'static str, fn() -> Box<dyn ConfigurableConstraint>> = phf::phf_map! {
-    "Anti-Knight" => || Box::new(AntiKnightConstraint::default()),
-    "Arrow" => || Box::new(ArrowConstraint::default()),
-    "Black Kropki Dot" => || Box::new(BlackKropkiConstraint::default()),
-    "Diagonal" => || Box::new(DiagonalConstraint::default()),
-    "German Whisper" => || Box::new(GermanWhisperConstraint::default()),
-    "Killer Cage" => || Box::new(KillerCageConstraint::default()),
-    "Little Killer" => || Box::new(LittleKillerConstraint::default()),
-    "Palindrome" => || Box::new(PalindromeConstraint::default()),
-    "Renban" => || Box::new(RenbanConstraint::default()),
-    "Thermo" => || Box::new(ThermoConstraint::default()),
-    "White Kropki Dot" => || Box::new(WhiteKropkiConstraint::default()),
+    "Anti-Knight" => || Box::<AntiKnightConstraint>::default(),
+    "Arrow" => || Box::<ArrowConstraint>::default(),
+    "Black Kropki Dot" => || Box::<BlackKropkiConstraint>::default(),
+    "Diagonal" => || Box::<DiagonalConstraint>::default(),
+    "German Whisper" => || Box::<GermanWhisperConstraint>::default(),
+    "Killer Cage" => || Box::<KillerCageConstraint>::default(),
+    "Little Killer" => || Box::<LittleKillerConstraint>::default(),
+    "Palindrome" => || Box::<PalindromeConstraint>::default(),
+    "Renban" => || Box::<RenbanConstraint>::default(),
+    "Thermo" => || Box::<ThermoConstraint>::default(),
+    "White Kropki Dot" => || Box::<WhiteKropkiConstraint>::default(),
 };
 
 pub fn make_default_constraint() -> Box<dyn ConfigurableConstraint> {
-    Box::new(KillerCageConstraint::default())
+    Box::<KillerCageConstraint>::default()
 }

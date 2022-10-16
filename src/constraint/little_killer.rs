@@ -56,7 +56,7 @@ impl ConfigurableConstraint for LittleKillerConstraint {
     }
 
     fn name(&self) -> &'static str {
-        return "Little Killer";
+        "Little Killer"
     }
 
     fn draw(&self, context: &SudokuDrawContext) {
@@ -149,7 +149,7 @@ impl ConfigurableConstraint for LittleKillerConstraint {
         }
 
         let positive_gradient =
-            positive_gradient.unwrap_or_else(|| (top_cell.row == 0) ^ (top_cell.col == 0));
+            positive_gradient.unwrap_or((top_cell.row == 0) ^ (top_cell.col == 0));
         let mut arrow_tip = if positive_gradient {
             context.cell_rect(top_cell.row, top_cell.col).min
         } else {

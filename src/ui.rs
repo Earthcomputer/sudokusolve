@@ -26,6 +26,7 @@ pub struct SudokuDrawContext<'a> {
 }
 
 impl<'a> SudokuDrawContext<'a> {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         width: usize,
         height: usize,
@@ -120,6 +121,7 @@ impl<'a> SudokuWidget<'a> {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn draw_digit(
         left: f32,
         top: f32,
@@ -516,7 +518,7 @@ impl MyApp {
         }
         self.solution = Some(solution);
 
-        return SolveResult::Ok;
+        SolveResult::Ok
     }
 
     fn extra_constraints_ui(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
