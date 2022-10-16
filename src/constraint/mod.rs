@@ -9,6 +9,7 @@ mod kropki;
 mod latin_square;
 mod little_killer;
 mod palindrome;
+mod parity;
 mod renban;
 mod standard_boxes;
 mod thermo;
@@ -31,6 +32,7 @@ use killer_cage::KillerCageConstraint;
 use kropki::{BlackKropkiConstraint, WhiteKropkiConstraint};
 use little_killer::LittleKillerConstraint;
 use palindrome::PalindromeConstraint;
+use parity::ParityConstraint;
 use renban::RenbanConstraint;
 use thermo::ThermoConstraint;
 
@@ -66,6 +68,7 @@ pub static CONFIGURABLES: phf::Map<&'static str, fn() -> Box<dyn ConfigurableCon
     "Killer Cage" => || Box::<KillerCageConstraint>::default(),
     "Little Killer" => || Box::<LittleKillerConstraint>::default(),
     "Palindrome" => || Box::<PalindromeConstraint>::default(),
+    "Parity" => || Box::<ParityConstraint>::default(),
     "Renban" => || Box::<RenbanConstraint>::default(),
     "Thermo" => || Box::<ThermoConstraint>::default(),
     "White Kropki Dot" => || Box::<WhiteKropkiConstraint>::default(),
