@@ -1,0 +1,60 @@
+on:
+  - push
+
+name: Release
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    name: Build for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    env:
+      CPATH: ./z3/src/api
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
+        with:
+          repository: Z3Prover/z3
+          path: z3
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+      - uses: actions-rs/cargo@v1
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          RUSTFLAGS: '-C link-arg=-s'
+        with:
+          command: build
+          args: --release
+      - uses: actions-rs/cargo@v1
+        if: matrix.os != 'ubuntu-latest'
+        with:
+          command: build
+          args: --release --features static-link-z3
+      - uses: actions/upload-artifact@v2
+        if: matrix.os == 'windows-latest'
+        with:
+          name: sudokusolve-windows.exe
+          path: target/release/sudokusolve.exe
+      - uses: actions/upload-artifact@v2
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          name: sudokusolve-linux
+          path: target/release/sudokusolve
+      - uses: actions/upload-artifact@v2
+        if: matrix.os == 'macos-latest'
+        with:
+          name: sudokusolve-macos
+          path: target/release/sudokusolve

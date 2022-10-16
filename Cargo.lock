@@ -2223,4 +2223,5 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c82dcbc58be4bf1994c520066cb2bd6c3d36aed0fdc57244f34d277421986a6"
 dependencies = [
  "bindgen",
+ "cmake",
 ]
