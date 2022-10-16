@@ -2,6 +2,7 @@ mod anti_knight;
 mod arrow;
 mod diagonal;
 mod digit_definition;
+mod entropic_line;
 mod german_whisper;
 mod given_digit;
 mod killer_cage;
@@ -27,6 +28,7 @@ pub use standard_boxes::*;
 use anti_knight::AntiKnightConstraint;
 use arrow::ArrowConstraint;
 use diagonal::DiagonalConstraint;
+use entropic_line::EntropicLineConstraint;
 use german_whisper::GermanWhisperConstraint;
 use killer_cage::KillerCageConstraint;
 use kropki::{BlackKropkiConstraint, WhiteKropkiConstraint};
@@ -64,6 +66,7 @@ pub static CONFIGURABLES: phf::Map<&'static str, fn() -> Box<dyn ConfigurableCon
     "Arrow" => || Box::<ArrowConstraint>::default(),
     "Black Kropki Dot" => || Box::<BlackKropkiConstraint>::default(),
     "Diagonal" => || Box::<DiagonalConstraint>::default(),
+    "Entropic Line" => || Box::<EntropicLineConstraint>::default(),
     "German Whisper" => || Box::<GermanWhisperConstraint>::default(),
     "Killer Cage" => || Box::<KillerCageConstraint>::default(),
     "Little Killer" => || Box::<LittleKillerConstraint>::default(),

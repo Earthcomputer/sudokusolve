@@ -3,6 +3,7 @@
 use crate::alloc::Z3Allocator;
 use ouroboros::self_referencing;
 use std::array;
+use std::ops::RangeInclusive;
 
 pub const SUDOKU_SIZE: usize = 9;
 
@@ -77,6 +78,7 @@ pub struct SudokuContext {
 
     width: usize,
     height: usize,
+    digits_range: RangeInclusive<usize>,
     #[borrows(ctx)]
     #[covariant]
     cells: Vec<z3::ast::Int<'this>>,
@@ -94,6 +96,7 @@ impl SudokuContext {
             int_type_builder: |ctx| z3::Sort::int(ctx),
             width: SUDOKU_SIZE,
             height: SUDOKU_SIZE,
+            digits_range: 1..=SUDOKU_SIZE,
             cells_builder: |ctx| {
                 (0..SUDOKU_SIZE * SUDOKU_SIZE)
                     .map(|_| z3::ast::Int::fresh_const(ctx, "C"))
@@ -158,6 +161,10 @@ impl SudokuContext {
 
     pub fn height(&self) -> usize {
         *self.borrow_height()
+    }
+
+    pub fn digits_range(&self) -> RangeInclusive<usize> {
+        self.borrow_digits_range().clone()
     }
 
     pub fn all_cells(&self) -> &[z3::ast::Int] {
