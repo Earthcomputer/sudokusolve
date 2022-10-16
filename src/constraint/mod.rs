@@ -14,6 +14,7 @@ mod parity;
 mod renban;
 mod standard_boxes;
 mod thermo;
+mod x_sum;
 
 use crate::sudoku::SudokuContext;
 use crate::ui::SudokuDrawContext;
@@ -37,6 +38,7 @@ use palindrome::PalindromeConstraint;
 use parity::ParityConstraint;
 use renban::RenbanConstraint;
 use thermo::ThermoConstraint;
+use x_sum::XSumConstraint;
 
 pub trait Constraint {
     fn apply<'a>(&self, solver: &z3::Solver, context: &'a SudokuContext);
@@ -75,6 +77,7 @@ pub static CONFIGURABLES: phf::Map<&'static str, fn() -> Box<dyn ConfigurableCon
     "Renban" => || Box::<RenbanConstraint>::default(),
     "Thermo" => || Box::<ThermoConstraint>::default(),
     "White Kropki Dot" => || Box::<WhiteKropkiConstraint>::default(),
+    "X-Sum" => || Box::<XSumConstraint>::default(),
 };
 
 pub fn make_default_constraint() -> Box<dyn ConfigurableConstraint> {

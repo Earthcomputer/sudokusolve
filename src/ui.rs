@@ -150,16 +150,22 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
             x: mut width,
             y: mut height,
         } = ui.available_size();
-        let cell_size = (width / self.width as f32).min(height / self.height as f32);
-        width = cell_size * self.width as f32;
-        height = cell_size * self.height as f32;
+        let cell_size = (width / (self.width + 2) as f32).min(height / (self.height + 2) as f32);
+        width = cell_size * (self.width + 2) as f32;
+        height = cell_size * (self.height + 2) as f32;
         ui.allocate_ui(egui::Vec2::new(width, height), |ui| {
             ui.set_min_width(width);
             ui.set_min_height(height);
             let egui::Rect {
-                min: egui::Pos2 { x: left, y: top },
+                min:
+                    egui::Pos2 {
+                        x: mut left,
+                        y: mut top,
+                    },
                 ..
             } = ui.max_rect();
+            left += cell_size;
+            top += cell_size;
 
             let mut n_times_cell_constrained = vec![0; self.width * self.height];
             let mut depth_sorted_constraints: Vec<_> =
@@ -239,14 +245,20 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
             for x in 0..=self.width {
                 let mut stroke = ui.style().visuals.widgets.noninteractive.fg_stroke;
                 stroke.width = if x % 3 == 0 { 3f32 } else { 1f32 };
-                ui.painter()
-                    .vline(left + x as f32 * cell_size, top..=top + height, stroke);
+                ui.painter().vline(
+                    left + x as f32 * cell_size,
+                    top..=top + cell_size * self.height as f32,
+                    stroke,
+                );
             }
             for y in 0..=self.height {
                 let mut stroke = ui.style().visuals.widgets.noninteractive.fg_stroke;
                 stroke.width = if y % 3 == 0 { 3f32 } else { 1f32 };
-                ui.painter()
-                    .hline(left..=left + width, top + y as f32 * cell_size, stroke);
+                ui.painter().hline(
+                    left..=left + cell_size * self.width as f32,
+                    top + y as f32 * cell_size,
+                    stroke,
+                );
             }
 
             let mut clicked_cell = false;
@@ -675,7 +687,7 @@ impl eframe::App for MyApp {
                         egui::CentralPanel::default()
                             .frame(
                                 egui::Frame::canvas(&ctx.style())
-                                    .inner_margin(20f32)
+                                    .inner_margin(5f32)
                                     .stroke(egui::Stroke::none()),
                             )
                             .show_inside(ui, |ui| {
