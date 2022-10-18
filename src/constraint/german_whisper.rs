@@ -7,7 +7,7 @@ use z3::Solver;
 use crate::ui::SudokuDrawContext;
 
 #[derive(Default, DynClone)]
-#[dyn_clone(Constraint)]
+#[dyn_clone(Constraint + Send)]
 pub struct GermanWhisperConstraint {
     cells: Vec<sudoku::Cell>,
 }

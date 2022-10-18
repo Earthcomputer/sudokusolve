@@ -3,8 +3,12 @@ use crate::constraint::{
     LatinSquareConstraint, StandardBoxesConstraint,
 };
 use crate::sudoku::{SudokuContext, SUDOKU_SIZE};
+use crate::z3_helper::{BorrowedContext, OwnedContext};
 use crate::{color, constraint, sudoku};
 use eframe::egui;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 struct ConstraintUi {
     color: egui::Color32,
@@ -76,18 +80,21 @@ struct SudokuWidget<'a> {
     height: usize,
     given_digits: &'a mut [Option<i32>],
     selected_cell: &'a mut Option<sudoku::Cell>,
-    solution: &'a mut Option<Vec<i32>>,
+    solution: &'a Mutex<Option<Vec<i32>>>,
+    solving: bool,
     extra_constraints: &'a mut [ConstraintUi],
     selected_extra_constraint: Option<usize>,
 }
 
 impl<'a> SudokuWidget<'a> {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         width: usize,
         height: usize,
         given_digits: &'a mut [Option<i32>],
         selected_cell: &'a mut Option<sudoku::Cell>,
-        solution: &'a mut Option<Vec<i32>>,
+        solution: &'a Mutex<Option<Vec<i32>>>,
+        solving: bool,
         extra_constraints: &'a mut [ConstraintUi],
         selected_extra_constraint: Option<usize>,
     ) -> Self {
@@ -98,6 +105,7 @@ impl<'a> SudokuWidget<'a> {
             given_digits,
             selected_cell,
             solution,
+            solving,
             extra_constraints,
             selected_extra_constraint,
         }
@@ -111,7 +119,7 @@ impl<'a> SudokuWidget<'a> {
     fn set_given_digit(&mut self, row: usize, col: usize, digit: Option<i32>) {
         assert!(row < self.width && col < self.height);
         self.given_digits[col + self.width * row] = digit;
-        *self.solution = None;
+        *self.solution.lock().unwrap() = None;
     }
 
     fn cell_rect(left: f32, top: f32, cell_size: f32, row: usize, col: usize) -> egui::Rect {
@@ -275,14 +283,14 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
                             ui,
                             ui.style().visuals.widgets.active.text_color(),
                         );
-                    } else if let Some(solution) = self.solution {
+                    } else if let Some(solution) = self.solution.lock().unwrap().as_ref() {
                         Self::draw_digit(
                             left,
                             top,
                             cell_size,
                             row,
                             col,
-                            solution[col + SUDOKU_SIZE * row],
+                            (*solution)[col + SUDOKU_SIZE * row],
                             ui,
                             if ui.style().visuals.dark_mode {
                                 egui::Color32::LIGHT_BLUE
@@ -299,7 +307,9 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
                     if cell_interaction.clicked() {
                         *self.selected_cell = Some(sudoku::Cell::new(row, col));
                         clicked_cell = true;
-                    } else if cell_interaction.clicked_by(egui::PointerButton::Secondary) {
+                    } else if cell_interaction.clicked_by(egui::PointerButton::Secondary)
+                        && !self.solving
+                    {
                         if let Some(constraint_index) = self.selected_extra_constraint {
                             let constraint =
                                 &mut self.extra_constraints[constraint_index].constraint;
@@ -390,8 +400,10 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
                         pressed: true,
                         ..
                     } => {
-                        if let Some(cell) = *self.selected_cell {
-                            self.set_given_digit(cell.row, cell.col, None);
+                        if !self.solving {
+                            if let Some(cell) = *self.selected_cell {
+                                self.set_given_digit(cell.row, cell.col, None);
+                            }
                         }
                     }
                     egui::Event::Key {
@@ -416,8 +428,10 @@ impl<'a> egui::Widget for SudokuWidget<'a> {
                             egui::Key::Num9 => Some(9),
                             _ => None,
                         };
-                        if let (Some(digit), Some(cell)) = (digit, *self.selected_cell) {
-                            self.set_given_digit(cell.row, cell.col, Some(digit));
+                        if !self.solving {
+                            if let (Some(digit), Some(cell)) = (digit, *self.selected_cell) {
+                                self.set_given_digit(cell.row, cell.col, Some(digit));
+                            }
                         }
                     }
                     _ => {}
@@ -432,13 +446,14 @@ enum SolveResult {
     Ok,
     Unsolvable,
     TimedOut,
+    Canceled,
     InvalidInput,
 }
 
 impl SolveResult {
     fn message(&self) -> &'static str {
         match self {
-            SolveResult::Ok => "",
+            SolveResult::Ok | SolveResult::Canceled => "",
             SolveResult::Unsolvable => "Unsolvable",
             SolveResult::TimedOut => "Solver timed out",
             SolveResult::InvalidInput => "Invalid input",
@@ -449,10 +464,13 @@ impl SolveResult {
 struct MyApp {
     grid: [Option<i32>; SUDOKU_SIZE * SUDOKU_SIZE],
     selected_cell: Option<sudoku::Cell>,
-    solution: Option<Vec<i32>>,
+    solution: Arc<Mutex<Option<Vec<i32>>>>,
+    solving: Arc<AtomicBool>,
+    interrupted: Arc<AtomicBool>,
     extra_constraints: Vec<ConstraintUi>,
     selected_constraint: Option<usize>,
-    error_message: &'static str,
+    error_message: Arc<Mutex<&'static str>>,
+    solver_cancel_handle: Arc<Mutex<Option<BorrowedContext>>>,
 }
 
 impl MyApp {
@@ -460,29 +478,28 @@ impl MyApp {
         MyApp {
             grid: [None; SUDOKU_SIZE * SUDOKU_SIZE],
             selected_cell: None,
-            solution: None,
+            solution: Arc::new(Mutex::new(None)),
+            solving: Arc::new(AtomicBool::new(false)),
+            interrupted: Arc::new(AtomicBool::new(false)),
             extra_constraints: Vec::new(),
             selected_constraint: None,
-            error_message: "",
+            error_message: Arc::new(Mutex::new("")),
+            solver_cancel_handle: Arc::new(Mutex::new(None)),
         }
     }
 
-    fn solve(&mut self) -> SolveResult {
+    fn solve(&self, callback: impl FnOnce(SolveResult) + Send + Sync + 'static) {
         if self
             .extra_constraints
             .iter()
             .any(|constraint| !constraint.constraint.is_valid())
         {
-            return SolveResult::InvalidInput;
+            callback(SolveResult::InvalidInput);
+            self.solving.store(false, Ordering::Release);
+            return;
         }
 
-        let mut cfg = z3::Config::new();
-        cfg.set_param_value("timeout", "5000");
-        let ctx = z3::Context::new(&cfg);
-        let sudoku = SudokuContext::create(ctx);
-        let solver = z3::Solver::new(sudoku.ctx());
-
-        let mut constraints: Vec<Box<dyn Constraint>> = Vec::new();
+        let mut constraints: Vec<Box<dyn Constraint + Send>> = Vec::new();
         constraints.push(Box::new(DigitDefinitionConstraint));
         constraints.push(Box::new(LatinSquareConstraint));
         constraints.push(Box::new(StandardBoxesConstraint));
@@ -503,41 +520,74 @@ impl MyApp {
                 .map(|constraint| constraint.constraint.dyn_clone()),
         );
 
-        for constraint in &constraints {
-            constraint.apply(&solver, &sudoku);
-        }
+        let solution = self.solution.clone();
+        let solving = self.solving.clone();
+        let interrupted = self.interrupted.clone();
+        let solver_cancel_handle = self.solver_cancel_handle.clone();
+        interrupted.store(false, Ordering::Release);
 
-        let result = solver.check();
-        match result {
-            z3::SatResult::Unsat => return SolveResult::Unsolvable,
-            z3::SatResult::Unknown => return SolveResult::TimedOut,
-            z3::SatResult::Sat => {}
-        };
-
-        let model = solver
-            .get_model()
-            .expect("The solver check should have passed");
-        let mut solution = vec![0; SUDOKU_SIZE * SUDOKU_SIZE];
-        for row in 0..sudoku.height() {
-            for col in 0..sudoku.width() {
-                let result = model
-                    .eval(sudoku.get_cell(row, col), true)
-                    .unwrap()
-                    .as_u64()
-                    .unwrap() as i32;
-                solution[col + row * SUDOKU_SIZE] = result;
+        thread::spawn(move || {
+            let ctx = OwnedContext::new(z3::Context::new(&z3::Config::new()));
+            {
+                let mut guard = solver_cancel_handle.lock().unwrap();
+                *guard = Some(ctx.make_borrowed());
             }
-        }
-        self.solution = Some(solution);
+            let sudoku = SudokuContext::create(&ctx, &constraints);
+            let solver = z3::Solver::new(sudoku.ctx());
 
-        SolveResult::Ok
+            for constraint in &constraints {
+                constraint.apply(&solver, &sudoku);
+            }
+
+            let result = solver.check();
+            match result {
+                z3::SatResult::Unsat => {
+                    callback(SolveResult::Unsolvable);
+                    solving.store(false, Ordering::Release);
+                    return;
+                }
+                z3::SatResult::Unknown => {
+                    callback(if interrupted.load(Ordering::Acquire) {
+                        SolveResult::Canceled
+                    } else {
+                        SolveResult::TimedOut
+                    });
+                    solving.store(false, Ordering::Release);
+                    return;
+                }
+                z3::SatResult::Sat => {}
+            };
+
+            let model = solver
+                .get_model()
+                .expect("The solver check should have passed");
+            let mut sol = vec![0; SUDOKU_SIZE * SUDOKU_SIZE];
+            for row in 0..sudoku.height() {
+                for col in 0..sudoku.width() {
+                    let result = model
+                        .eval(sudoku.get_cell(row, col), true)
+                        .unwrap()
+                        .as_u64()
+                        .unwrap() as i32;
+                    sol[col + row * SUDOKU_SIZE] = result;
+                }
+            }
+            *solution.lock().unwrap() = Some(sol);
+            solving.store(false, Ordering::Release);
+
+            callback(SolveResult::Ok);
+        });
     }
 
     fn extra_constraints_ui(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        let solving = self.solving.load(Ordering::Acquire);
         egui::TopBottomPanel::top("constraint_list")
             .height_range(ui.available_height() / 3.0..=ui.available_height() / 3.0)
             .show_inside(ui, |ui| {
-                if ui.button("Add Constraint").clicked() {
+                if ui
+                    .add_enabled(!solving, egui::Button::new("Add Constraint"))
+                    .clicked()
+                {
                     self.selected_constraint = Some(self.extra_constraints.len());
                     let mut colors_to_avoid: Vec<_> =
                         self.extra_constraints.iter().map(|c| c.color).collect();
@@ -576,9 +626,12 @@ impl MyApp {
                                     self.selected_constraint = Some(constraint_index);
                                 }
                                 if ui
-                                    .button(
-                                        egui::RichText::new("Delete")
-                                            .text_style(egui::TextStyle::Small),
+                                    .add_enabled(
+                                        !solving,
+                                        egui::Button::new(
+                                            egui::RichText::new("Delete")
+                                                .text_style(egui::TextStyle::Small),
+                                        ),
                                     )
                                     .clicked()
                                 {
@@ -597,54 +650,57 @@ impl MyApp {
         ui.add_space(10.0);
 
         if let Some(selected_constraint) = self.selected_constraint {
-            let mut constraint = &mut self.extra_constraints[selected_constraint];
+            ui.add_enabled_ui(!solving, |ui| {
+                let mut constraint = &mut self.extra_constraints[selected_constraint];
 
-            let mut constraint_name = constraint.constraint.name();
-            egui::ComboBox::from_id_source("constraint_type")
-                .selected_text(constraint.constraint.name())
-                .show_ui(ui, |ui| {
-                    let mut constraints: Vec<_> =
-                        constraint::CONFIGURABLES.keys().copied().collect();
-                    constraints.sort();
-                    for constraint in constraints {
-                        ui.selectable_value(&mut constraint_name, constraint, constraint);
-                    }
-                });
-            if constraint_name != constraint.constraint.name() {
-                if let Some(constraint_creator) = constraint::CONFIGURABLES.get(constraint_name) {
-                    let mut new_constraint = constraint_creator();
-                    let new_max_highlighted = new_constraint.get_max_highlighted_cells();
-                    if let (Some(new_highlighted), Some(old_highlighted)) = (
-                        new_constraint.get_highlighted_cells(),
-                        constraint.constraint.get_highlighted_cells(),
-                    ) {
-                        if new_max_highlighted < old_highlighted.len() {
-                            new_highlighted
-                                .extend_from_slice(&old_highlighted[..new_max_highlighted]);
-                        } else {
-                            new_highlighted.extend_from_slice(old_highlighted);
+                let mut constraint_name = constraint.constraint.name();
+                egui::ComboBox::from_id_source("constraint_type")
+                    .selected_text(constraint.constraint.name())
+                    .show_ui(ui, |ui| {
+                        let mut constraints: Vec<_> =
+                            constraint::CONFIGURABLES.keys().copied().collect();
+                        constraints.sort();
+                        for constraint in constraints {
+                            ui.selectable_value(&mut constraint_name, constraint, constraint);
                         }
+                    });
+                if constraint_name != constraint.constraint.name() {
+                    if let Some(constraint_creator) = constraint::CONFIGURABLES.get(constraint_name)
+                    {
+                        let mut new_constraint = constraint_creator();
+                        let new_max_highlighted = new_constraint.get_max_highlighted_cells();
+                        if let (Some(new_highlighted), Some(old_highlighted)) = (
+                            new_constraint.get_highlighted_cells(),
+                            constraint.constraint.get_highlighted_cells(),
+                        ) {
+                            if new_max_highlighted < old_highlighted.len() {
+                                new_highlighted
+                                    .extend_from_slice(&old_highlighted[..new_max_highlighted]);
+                            } else {
+                                new_highlighted.extend_from_slice(old_highlighted);
+                            }
+                        }
+                        let color = constraint.color;
+                        self.extra_constraints[selected_constraint] = ConstraintUi {
+                            color,
+                            constraint: new_constraint,
+                        };
+                        constraint = &mut self.extra_constraints[selected_constraint];
                     }
-                    let color = constraint.color;
-                    self.extra_constraints[selected_constraint] = ConstraintUi {
-                        color,
-                        constraint: new_constraint,
-                    };
-                    constraint = &mut self.extra_constraints[selected_constraint];
                 }
-            }
 
-            ui.add_space(5.0);
-
-            if constraint.constraint.get_highlighted_cells().is_some() {
-                if constraint.constraint.get_max_highlighted_cells() == 1 {
-                    ui.label("Right click to select the cell for this constraint");
-                } else {
-                    ui.label("Right click to add cells to this constraint");
-                }
                 ui.add_space(5.0);
-            }
-            constraint.constraint.configure(ctx, ui);
+
+                if constraint.constraint.get_highlighted_cells().is_some() {
+                    if constraint.constraint.get_max_highlighted_cells() == 1 {
+                        ui.label("Right click to select the cell for this constraint");
+                    } else {
+                        ui.label("Right click to add cells to this constraint");
+                    }
+                    ui.add_space(5.0);
+                }
+                constraint.constraint.configure(ctx, ui);
+            });
         }
     }
 }
@@ -660,21 +716,41 @@ impl eframe::App for MyApp {
             .show(ctx, |ui| {
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Max), |ui| {
-                        if ui
-                            .button(egui::RichText::new("Solve").font({
-                                let mut font = egui::TextStyle::Heading.resolve(ui.style());
-                                font.size *= 2.0;
-                                font
-                            }))
-                            .clicked()
-                        {
-                            let result = self.solve();
-                            self.error_message = result.message();
+                        let solve_font = {
+                            let mut font = egui::TextStyle::Heading.resolve(ui.style());
+                            font.size *= 2.0;
+                            font
+                        };
+                        if self.solving.load(Ordering::Acquire) {
+                            let cancel_button =
+                                ui.button(egui::RichText::new("Cancel").font(solve_font));
+                            if cancel_button.clicked() {
+                                self.interrupted.store(true, Ordering::Release);
+                                let guard = self.solver_cancel_handle.lock().unwrap();
+                                if let Some(handle) = guard.as_ref() {
+                                    handle.interrupt();
+                                }
+                            }
+                            ui.add_space(cancel_button.rect.height() * 0.5);
+                            ui.add(egui::Spinner::new().size(cancel_button.rect.height()));
+                        } else {
+                            if ui
+                                .button(egui::RichText::new("Solve").font(solve_font))
+                                .clicked()
+                                && !self.solving.swap(true, Ordering::AcqRel)
+                            {
+                                let error_message = self.error_message.clone();
+                                let ctx = ctx.clone();
+                                self.solve(move |result| {
+                                    *error_message.lock().unwrap() = result.message();
+                                    ctx.request_repaint();
+                                });
+                            }
+                            ui.heading(
+                                egui::RichText::new(*self.error_message.lock().unwrap())
+                                    .color(ui.style().visuals.error_fg_color),
+                            );
                         }
-                        ui.heading(
-                            egui::RichText::new(self.error_message)
-                                .color(ui.style().visuals.error_fg_color),
-                        );
                     });
                     ui.add_space(5.0);
                     ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
@@ -697,7 +773,8 @@ impl eframe::App for MyApp {
                                         SUDOKU_SIZE,
                                         &mut self.grid,
                                         &mut self.selected_cell,
-                                        &mut self.solution,
+                                        &self.solution,
+                                        self.solving.load(Ordering::Acquire),
                                         &mut self.extra_constraints,
                                         self.selected_constraint,
                                     ));

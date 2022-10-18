@@ -95,7 +95,7 @@ pub fn draw_number_outside_grid(
 }
 
 #[derive(DynClone)]
-#[dyn_clone(Constraint)]
+#[dyn_clone(Constraint + Send)]
 pub struct XSumConstraint {
     total: String,
     direction: Direction,
@@ -118,7 +118,7 @@ impl Constraint for XSumConstraint {
         let start_cell = context.get_cell(start_pos.row, start_pos.col);
         let mut sum = context.const_int(0);
 
-        if !iter_cells_in_dir(start_pos, self.direction, context, |i, cell| {
+        let valid = iter_cells_in_dir(start_pos, self.direction, context, |i, cell| {
             sum = context.ints().alloc(
                 sum.add(
                     start_cell
@@ -126,7 +126,8 @@ impl Constraint for XSumConstraint {
                         .ite(context.get_cell(cell.row, cell.col), context.const_int(0)),
                 ),
             );
-        }) {
+        });
+        if !valid {
             return;
         }
 

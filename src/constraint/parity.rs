@@ -15,7 +15,7 @@ enum Parity {
 }
 
 #[derive(DynClone)]
-#[dyn_clone(Constraint)]
+#[dyn_clone(Constraint + Send)]
 pub struct ParityConstraint {
     parity: Parity,
     cells: Vec<sudoku::Cell>,

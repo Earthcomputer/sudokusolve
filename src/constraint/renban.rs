@@ -36,7 +36,7 @@ pub fn draw_line_between_cells(cells: &[sudoku::Cell], context: &SudokuDrawConte
 }
 
 #[derive(Default, DynClone)]
-#[dyn_clone(Constraint)]
+#[dyn_clone(Constraint + Send)]
 pub struct RenbanConstraint {
     cells: Vec<sudoku::Cell>,
 }

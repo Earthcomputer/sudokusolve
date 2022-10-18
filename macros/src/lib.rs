@@ -1,7 +1,27 @@
 use proc_macro::TokenStream;
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::spanned::Spanned;
-use syn::{parse_macro_input, Data, DeriveInput, Fields};
+use syn::{parse_macro_input, Data, DeriveInput, Fields, Token, TraitBound};
+use syn::parse::{Parse, ParseStream};
+use syn::punctuated::Punctuated;
+
+struct Target {
+    target: Punctuated<TraitBound, Token![+]>,
+}
+
+impl Parse for Target {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(Self {
+            target: Punctuated::parse_separated_nonempty(input)?
+        })
+    }
+}
+
+impl ToTokens for Target {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        self.target.to_tokens(tokens)
+    }
+}
 
 #[proc_macro_derive(DynClone, attributes(dyn_clone))]
 pub fn derive_dyn_clone(input: TokenStream) -> TokenStream {
@@ -27,7 +47,7 @@ pub fn derive_dyn_clone(input: TokenStream) -> TokenStream {
                 .into();
         }
     };
-    let target: syn::TraitBound = match target.parse_args() {
+    let target: Target = match target.parse_args() {
         Ok(target) => target,
         Err(err) => return err.to_compile_error().into(),
     };

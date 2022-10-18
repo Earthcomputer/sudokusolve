@@ -7,7 +7,7 @@ use crate::sudoku::SudokuContext;
 use crate::ui::SudokuDrawContext;
 
 #[derive(DynClone)]
-#[dyn_clone(Constraint)]
+#[dyn_clone(Constraint + Send)]
 pub struct KillerCageConstraint {
     cells: Vec<sudoku::Cell>,
     total: String,

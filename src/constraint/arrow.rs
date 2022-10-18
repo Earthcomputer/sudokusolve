@@ -9,7 +9,7 @@ use z3::ast::Ast;
 use z3::Solver;
 
 #[derive(Default, DynClone)]
-#[dyn_clone(Constraint)]
+#[dyn_clone(Constraint + Send)]
 pub struct ArrowConstraint {
     cells: Vec<sudoku::Cell>,
 }

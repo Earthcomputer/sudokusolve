@@ -16,6 +16,7 @@ mod standard_boxes;
 mod thermo;
 mod x_sum;
 
+use std::any::Any;
 use crate::sudoku::SudokuContext;
 use crate::ui::SudokuDrawContext;
 use crate::{sudoku, DynClone};
@@ -32,7 +33,7 @@ use diagonal::DiagonalConstraint;
 use entropic_line::EntropicLineConstraint;
 use german_whisper::GermanWhisperConstraint;
 use killer_cage::KillerCageConstraint;
-use kropki::{BlackKropkiConstraint, WhiteKropkiConstraint};
+use kropki::{BlackKropkiConstraint, NegativeBlackKropkiConstraint, NegativeWhiteKropkiConstraint, WhiteKropkiConstraint};
 use little_killer::LittleKillerConstraint;
 use palindrome::PalindromeConstraint;
 use parity::ParityConstraint;
@@ -40,11 +41,17 @@ use renban::RenbanConstraint;
 use thermo::ThermoConstraint;
 use x_sum::XSumConstraint;
 
-pub trait Constraint {
+pub trait Constraint: Any {
     fn apply<'a>(&self, solver: &z3::Solver, context: &'a SudokuContext);
 }
 
-pub trait ConfigurableConstraint: Constraint + DynClone<dyn Constraint> {
+impl dyn Constraint + Send {
+    fn downcast<T: Constraint>(&self) -> Option<&T> {
+        (self as &dyn Any).downcast_ref()
+    }
+}
+
+pub trait ConfigurableConstraint: Constraint + DynClone<dyn Constraint + Send> {
     fn configure(&mut self, ctx: &egui::Context, ui: &mut egui::Ui);
     fn get_highlighted_cells(&mut self) -> Option<&mut Vec<sudoku::Cell>>;
     fn get_max_highlighted_cells(&self) -> usize {
@@ -63,10 +70,11 @@ pub trait ConfigurableConstraint: Constraint + DynClone<dyn Constraint> {
     }
 }
 
-pub static CONFIGURABLES: phf::Map<&'static str, fn() -> Box<dyn ConfigurableConstraint>> = phf::phf_map! {
+pub static CONFIGURABLES: phf::Map<&'static str, fn() -> Box<dyn ConfigurableConstraint + Send>> = phf::phf_map! {
     "Anti-Knight" => || Box::<AntiKnightConstraint>::default(),
     "Arrow" => || Box::<ArrowConstraint>::default(),
     "Black Kropki Dot" => || Box::<BlackKropkiConstraint>::default(),
+    "Black Kropki Dots (Negative Constraint)" => || Box::<NegativeBlackKropkiConstraint>::default(),
     "Diagonal" => || Box::<DiagonalConstraint>::default(),
     "Entropic Line" => || Box::<EntropicLineConstraint>::default(),
     "German Whisper" => || Box::<GermanWhisperConstraint>::default(),
@@ -77,6 +85,7 @@ pub static CONFIGURABLES: phf::Map<&'static str, fn() -> Box<dyn ConfigurableCon
     "Renban" => || Box::<RenbanConstraint>::default(),
     "Thermo" => || Box::<ThermoConstraint>::default(),
     "White Kropki Dot" => || Box::<WhiteKropkiConstraint>::default(),
+    "White Kropki Dots (Negative Constraint)" => || Box::<NegativeWhiteKropkiConstraint>::default(),
     "X-Sum" => || Box::<XSumConstraint>::default(),
 };
 

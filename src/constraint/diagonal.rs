@@ -15,7 +15,7 @@ enum Direction {
 }
 
 #[derive(DynClone)]
-#[dyn_clone(Constraint)]
+#[dyn_clone(Constraint + Send)]
 pub struct DiagonalConstraint {
     direction: Direction,
 }

@@ -8,7 +8,7 @@ use z3::Solver;
 const KNIGHT_DELTAS: [(isize, isize); 4] = [(1, 2), (2, 1), (-1, 2), (-2, 1)];
 
 #[derive(Default, DynClone)]
-#[dyn_clone(Constraint)]
+#[dyn_clone(Constraint + Send)]
 pub struct AntiKnightConstraint;
 
 impl Constraint for AntiKnightConstraint {

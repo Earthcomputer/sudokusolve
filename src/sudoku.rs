@@ -1,9 +1,9 @@
 #![allow(clippy::too_many_arguments)] // for self_referencing
 
-use crate::alloc::Z3Allocator;
-use ouroboros::self_referencing;
+use crate::z3_helper::Z3Allocator;
 use std::array;
 use std::ops::RangeInclusive;
+use crate::constraint::Constraint;
 
 pub const SUDOKU_SIZE: usize = 9;
 
@@ -53,90 +53,77 @@ impl std::fmt::Display for Cell {
     }
 }
 
-#[self_referencing]
-pub struct SudokuContext {
-    ctx: z3::Context,
-    #[borrows(ctx)]
-    #[covariant]
-    bools: Z3Allocator<z3::ast::Bool<'this>>,
-    #[borrows(ctx)]
-    #[covariant]
-    ints: Z3Allocator<z3::ast::Int<'this>>,
-    #[borrows(ctx)]
-    #[covariant]
-    patterns: Z3Allocator<z3::Pattern<'this>>,
-    #[borrows(ctx)]
-    #[covariant]
-    sets: Z3Allocator<z3::ast::Set<'this>>,
-    #[borrows(ctx)]
-    #[covariant]
-    digits: [z3::ast::Int<'this>; 10],
+pub struct SudokuContext<'a> {
+    ctx: &'a z3::Context,
+    bools: Z3Allocator<z3::ast::Bool<'a>>,
+    ints: Z3Allocator<z3::ast::Int<'a>>,
+    patterns: Z3Allocator<z3::Pattern<'a>>,
+    sets: Z3Allocator<z3::ast::Set<'a>>,
+    digits: [z3::ast::Int<'a>; 10],
 
-    #[borrows(ctx)]
-    #[covariant]
-    int_type: z3::Sort<'this>,
+    int_type: z3::Sort<'a>,
 
     width: usize,
     height: usize,
     digits_range: RangeInclusive<usize>,
-    #[borrows(ctx)]
-    #[covariant]
-    cells: Vec<z3::ast::Int<'this>>,
+    cells: Vec<z3::ast::Int<'a>>,
+
+    constraints: &'a [Box<dyn Constraint + Send>],
 }
 
-impl SudokuContext {
-    pub fn create(ctx: z3::Context) -> Self {
-        SudokuContextBuilder {
+impl<'a> SudokuContext<'a> {
+    pub fn create(ctx: &'a z3::Context, constraints: &'a [Box<dyn Constraint + Send>]) -> Self {
+        Self {
             ctx,
-            bools_builder: |_| Z3Allocator::new(),
-            ints_builder: |_| Z3Allocator::new(),
-            patterns_builder: |_| Z3Allocator::new(),
-            sets_builder: |_| Z3Allocator::new(),
-            digits_builder: |ctx| array::from_fn(|i| z3::ast::Int::from_u64(ctx, i as u64)),
-            int_type_builder: |ctx| z3::Sort::int(ctx),
+            bools: Z3Allocator::new(),
+            ints: Z3Allocator::new(),
+            patterns: Z3Allocator::new(),
+            sets: Z3Allocator::new(),
+            digits: array::from_fn(|i| z3::ast::Int::from_u64(ctx, i as u64)),
+            int_type: z3::Sort::int(ctx),
             width: SUDOKU_SIZE,
             height: SUDOKU_SIZE,
             digits_range: 1..=SUDOKU_SIZE,
-            cells_builder: |ctx| {
+            cells:
                 (0..SUDOKU_SIZE * SUDOKU_SIZE)
                     .map(|_| z3::ast::Int::fresh_const(ctx, "C"))
                     .collect()
-            },
+            ,
+            constraints,
         }
-        .build()
     }
 
     pub fn ctx(&self) -> &z3::Context {
-        self.borrow_ctx()
+        self.ctx
     }
 
     pub fn bools(&self) -> &Z3Allocator<z3::ast::Bool> {
-        self.borrow_bools()
+        &self.bools
     }
 
     pub fn ints(&self) -> &Z3Allocator<z3::ast::Int> {
-        self.borrow_ints()
+        &self.ints
     }
 
     pub fn patterns(&self) -> &Z3Allocator<z3::Pattern> {
-        self.borrow_patterns()
+        &self.patterns
     }
 
     pub fn sets(&self) -> &Z3Allocator<z3::ast::Set> {
-        self.borrow_sets()
+        &self.sets
     }
 
     pub fn const_int(&self, n: i32) -> &z3::ast::Int {
         if (0..10).contains(&n) {
-            self.with_digits(|digits| &digits[n as usize])
+            &self.digits[n as usize]
         } else {
-            self.borrow_ints()
+            self.ints
                 .alloc(z3::ast::Int::from_i64(self.ctx(), n as i64))
         }
     }
 
     pub fn int_type(&self) -> &z3::Sort {
-        self.borrow_int_type()
+        &self.int_type
     }
 
     pub fn get_cell(&self, row: usize, col: usize) -> &z3::ast::Int {
@@ -152,22 +139,26 @@ impl SudokuContext {
             col,
             self.width()
         );
-        &self.all_cells()[col + self.width() * row]
+        &self.cells[col + self.width() * row]
     }
 
     pub fn width(&self) -> usize {
-        *self.borrow_width()
+        self.width
     }
 
     pub fn height(&self) -> usize {
-        *self.borrow_height()
+        self.height
     }
 
     pub fn digits_range(&self) -> RangeInclusive<usize> {
-        self.borrow_digits_range().clone()
+        self.digits_range.clone()
     }
 
     pub fn all_cells(&self) -> &[z3::ast::Int] {
-        self.borrow_cells()
+        &self.cells
+    }
+
+    pub fn constraints(&self) -> &'a [Box<dyn Constraint + Send>] {
+        self.constraints
     }
 }

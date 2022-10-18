@@ -8,7 +8,7 @@ use macros::DynClone;
 use z3::Solver;
 
 #[derive(Default, DynClone)]
-#[dyn_clone(Constraint)]
+#[dyn_clone(Constraint + Send)]
 pub struct ThermoConstraint {
     cells: Vec<sudoku::Cell>,
 }
