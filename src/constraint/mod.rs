@@ -2,6 +2,7 @@ mod anti_knight;
 mod arrow;
 mod diagonal;
 mod digit_definition;
+mod equal_sum;
 mod entropic_line;
 mod german_whisper;
 mod given_digit;
@@ -30,6 +31,7 @@ pub use standard_boxes::*;
 use anti_knight::AntiKnightConstraint;
 use arrow::ArrowConstraint;
 use diagonal::DiagonalConstraint;
+use equal_sum::EqualSumConstraint;
 use entropic_line::EntropicLineConstraint;
 use german_whisper::GermanWhisperConstraint;
 use killer_cage::KillerCageConstraint;
@@ -76,6 +78,7 @@ pub static CONFIGURABLES: phf::Map<&'static str, fn() -> Box<dyn ConfigurableCon
     "Black Kropki Dot" => || Box::<BlackKropkiConstraint>::default(),
     "Black Kropki Dots (Negative Constraint)" => || Box::<NegativeBlackKropkiConstraint>::default(),
     "Diagonal" => || Box::<DiagonalConstraint>::default(),
+    "Equal Sum" => || Box::<EqualSumConstraint>::default(),
     "Entropic Line" => || Box::<EntropicLineConstraint>::default(),
     "German Whisper" => || Box::<GermanWhisperConstraint>::default(),
     "Killer Cage" => || Box::<KillerCageConstraint>::default(),
